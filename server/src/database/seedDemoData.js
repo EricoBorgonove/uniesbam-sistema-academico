@@ -2,9 +2,9 @@ import bcrypt from 'bcryptjs';
 import { pool } from './connection.js';
 
 const defaultPassword = '123456';
-const TOTAL_STUDENTS = 500;
-const TOTAL_TEACHERS = 40;
-const TOTAL_CLASSES = 30;
+const TOTAL_STUDENTS = 2000;
+const TOTAL_TEACHERS = 150;
+const TOTAL_CLASSES = 150;
 
 const secretaryUser = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -82,11 +82,26 @@ function slug(value) {
 }
 
 function uniquePersonName(number, title = '') {
-  const first = firstNames[(number - 1) % firstNames.length];
-  const last = lastNames[(number - 1) % lastNames.length];
-  const secondLast = lastNames[(number + 10) % lastNames.length];
-  const suffix = String(number).padStart(3, '0');
-  return `${title}${first} ${last} ${secondLast} ${suffix}`.trim();
+  const index = number - 1;
+  const firstNameCount = firstNames.length;
+  const lastNameCount = lastNames.length;
+  const firstIndex = index % firstNameCount;
+  const familyIndex = Math.floor(index / firstNameCount) % lastNameCount;
+  const generationIndex = Math.floor(index / (firstNameCount * lastNameCount));
+  const usedLastNameIndexes = new Set();
+  const nextDistinctLastNameIndex = (preferredIndex) => {
+    let nextIndex = preferredIndex % lastNameCount;
+    while (usedLastNameIndexes.has(nextIndex)) {
+      nextIndex = (nextIndex + 1) % lastNameCount;
+    }
+    usedLastNameIndexes.add(nextIndex);
+    return nextIndex;
+  };
+  const first = firstNames[firstIndex];
+  const last = lastNames[nextDistinctLastNameIndex(firstIndex * 7 + familyIndex * 11)];
+  const secondLast = lastNames[nextDistinctLastNameIndex(familyIndex * 13 + firstIndex * 5 + 11)];
+  const thirdLast = lastNames[nextDistinctLastNameIndex(generationIndex * 7 + firstIndex * 3 + familyIndex + 19)];
+  return `${title}${first} ${last} ${secondLast} ${thirdLast}`.trim();
 }
 
 function buildTeachers() {
@@ -258,6 +273,9 @@ export async function seedDemoData() {
       );
     }
 
+    await client.query("DELETE FROM grades WHERE id::text LIKE 'fafa%'");
+    await client.query("DELETE FROM enrollments WHERE id::text LIKE 'eded%'");
+
     for (const enrollment of enrollments) {
       const [id, studentRegistration, classCode, status] = enrollment;
       await client.query(
@@ -274,17 +292,22 @@ export async function seedDemoData() {
       );
     }
 
+    const enrollmentResult = await client.query(
+      `SELECT e.id, s.registration, c.code
+       FROM enrollments e
+       JOIN students s ON s.id = e.student_id
+       JOIN classes c ON c.id = e.class_id`
+    );
+    const enrollmentIdsByStudentAndClass = new Map(
+      enrollmentResult.rows.map((row) => [`${row.registration}:${row.code}`, row.id])
+    );
+
     for (const [index, enrollment] of enrollments.entries()) {
       const [, studentRegistration, classCode] = enrollment;
-      const enrollmentResult = await client.query(
-        `SELECT e.id
-         FROM enrollments e
-         JOIN students s ON s.id = e.student_id
-         JOIN classes c ON c.id = e.class_id
-         WHERE s.registration = $1 AND c.code = $2`,
-        [studentRegistration, classCode]
-      );
-      const enrollmentId = enrollmentResult.rows[0].id;
+      const enrollmentId = enrollmentIdsByStudentAndClass.get(`${studentRegistration}:${classCode}`);
+      if (!enrollmentId) {
+        throw new Error(`Matricula nao encontrada para aluno ${studentRegistration} na turma ${classCode}`);
+      }
       const base = 6.2 + (index % 7) * 0.45;
       const grades = [
         [`fafa${String(index + 1).padStart(4, '0')}-1111-4eee-8eee-eeeeeeeeeee1`, enrollmentId, 'Nota 1', base, 1],

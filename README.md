@@ -200,12 +200,12 @@ Senha: 123456
 Dados demonstrativos criados:
 
 ```txt
-42 usuarios, incluindo admin, secretaria e professores
-40 professores demonstrativos
-500 alunos com nomes unicos
-30 turmas
-680 matriculas
-1360 notas
+152 usuarios, incluindo admin, secretaria e professores
+150 professores demonstrativos
+2000 alunos com nomes unicos
+150 turmas
+2180 matriculas
+4360 notas
 ```
 
 ## Rodar com Docker
